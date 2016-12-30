@@ -1,0 +1,6 @@
+Changes by John Puskar, johnpuskar@gmail.com, 11/15/16.
+ * Modified AutoSpInstaller\AutoSPInstallerFunctions.ps1 to exclude PIDKey if SKU is Foundation.
+ * Modified AutoSpInstaller\AutoSPInstallerFunctions.ps1 to detect if SharePoint Foundation is installed.
+ * Removed read-only attribute from AutoSpInstaller\AutoSPInstallerInput.xml.
+ * Added code to bypass reboot prompt and output a file for puppet notify of pending reboot.
+ * Modified AutoSpInstaller\AutoSPInstallerMain to skip certain methods if installing Foundation.

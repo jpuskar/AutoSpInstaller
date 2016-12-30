@@ -24,6 +24,10 @@ $0 = $myInvocation.MyCommand.Definition
 $env:dp0 = [System.IO.Path]::GetDirectoryName($0)
 $bits = Get-Item $env:dp0 | Split-Path -Parent
 
+if ((test-path "C:\windows\windows_sharepoint_puppet_reboot.txt") -eq $true) {
+    rm "C:\windows\windows_sharepoint_puppet_reboot.txt"
+}
+
 #Region Source External Functions
 . "$env:dp0\AutoSPInstallerFunctions.ps1"
 . "$env:dp0\AutoSPInstallerFunctionsCustom.ps1"
@@ -236,21 +240,27 @@ Function Setup-Services
     CreateStateServiceApp $xmlinput
     CreateMetadataServiceApp $xmlinput
     ConfigureClaimsToWindowsTokenService $xmlinput
-    CreateUserProfileServiceApplication $xmlinput
+    if($product -ne 'Foundation') {
+        CreateUserProfileServiceApplication $xmlinput
+    }
     CreateSPUsageApp $xmlinput
     ConfigureUsageLogging $xmlinput
-    CreateWebAnalyticsApp $xmlinput
-    CreateSecureStoreServiceApp $xmlinput
+    if($product -ne 'Foundation') {
+        CreateWebAnalyticsApp $xmlinput
+        CreateSecureStoreServiceApp $xmlinput
+    }
     ConfigureFoundationSearch $xmlinput
     ConfigureTracing $xmlinput
     CreateEnterpriseSearchServiceApp $xmlinput
-    CreateBusinessDataConnectivityServiceApp $xmlinput
-    CreateExcelServiceApp $xmlinput
-    CreateAccess2010ServiceApp $xmlinput
-    CreateVisioServiceApp $xmlinput
-    CreatePerformancePointServiceApp $xmlinput
-    CreateWordAutomationServiceApp $xmlinput
-    CreateProjectServerServiceApp $xmlinput
+    if($product -ne 'Foundation') {
+        CreateBusinessDataConnectivityServiceApp $xmlinput
+        CreateExcelServiceApp $xmlinput
+        CreateAccess2010ServiceApp $xmlinput
+        CreateVisioServiceApp $xmlinput
+        CreatePerformancePointServiceApp $xmlinput
+        CreateWordAutomationServiceApp $xmlinput
+        CreateProjectServerServiceApp $xmlinput
+    }
     ConfigureWorkflowTimerService $xmlinput
     if ($env:spVer -eq "14") # These are for SP2010 / Office Web Apps 2010 only
     {
@@ -258,7 +268,7 @@ Function Setup-Services
         CreatePowerPointOWAServiceApp $xmlinput
         CreateWordViewingOWAServiceApp $xmlinput
     }
-    if ($env:spVer -ge "15") # These are for SP2013+ only
+    if ($env:spVer -ge "15" -and $product -ne 'Foundation') # These are for SP2013+ only
 	{
 		CreateAppManagementServiceApp $xmlinput
 		CreateSubscriptionSettingsServiceApp $xmlinput
@@ -471,7 +481,12 @@ If (MatchComputerName $farmServers $env:COMPUTERNAME)
                 }
                 Else {Write-Host -ForegroundColor White " - AutoAdminLogon is not enabled in $inputFile; set it to `"true`" to enable it."}
                 Write-Host -ForegroundColor White " - The AutoSPInstaller script will resume after the server reboots and $env:USERDOMAIN\$env:USERNAME logs in."
-                if ((Confirm-LocalSession) -and ([string]::IsNullOrEmpty($restartPrompt))) {$restartPrompt = Read-Host -Prompt " - Do you want to restart immediately? (y/n)"}
+                if($unattended) {
+                    $restartPrompt = "n"
+                    "RebootPending" | out-file "C:\windows\windows_sharepoint_puppet_reboot.txt"
+                } elseif ((Confirm-LocalSession) -and ([string]::IsNullOrEmpty($restartPrompt)) -and (!$unattended)) {
+                    $restartPrompt = Read-Host -Prompt " - Do you want to restart immediately? (y/n)"
+                }
                 If ($restartPrompt -eq "y")
                 {
                     if (!(Confirm-LocalSession))
@@ -492,7 +507,7 @@ If (MatchComputerName $farmServers $env:COMPUTERNAME)
                 }
                 Else {Write-Host -ForegroundColor Yellow " - Please restart your computer to continue AutoSPInstaller."}
             }
-            if (!$restarting) {Pause "exit"}
+            if (!$restarting -and !$unattended) {Pause "exit"}
         }
         # Lately, loading the snapin throws an error: "System.TypeInitializationException: The type initializer for 'Microsoft.SharePoint.Utilities.SPUtility' threw an exception. ---> System.IO.FileNotFoundException:"...
         ElseIf ($_.Exception.Message -like "*Microsoft.SharePoint.Utilities.SPUtility*")
@@ -526,7 +541,7 @@ If (MatchComputerName $farmServers $env:COMPUTERNAME)
     {
         # Only do this stuff if this was a local session and it succeeded, and if we aren't attempting a remote install;
         # Otherwise these sites may not be available or 'complete' yet
-        If ((Confirm-LocalSession) -and !$aborted -and !($enableRemoteInstall))
+        If ((Confirm-LocalSession) -and !$aborted -and !($enableRemoteInstall) -and !($unattended))
         {
             # Launch Central Admin
             If (ShouldIProvision($xmlinput.Configuration.Farm.CentralAdmin) -eq $true)

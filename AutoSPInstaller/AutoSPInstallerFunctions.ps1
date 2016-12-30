@@ -2,6 +2,10 @@
 # EXTERNAL FUNCTIONS
 # ===================================================================================
 
+# Modified by John Puskar, johnpuskar@gmail.com, on 11/16/16.
+#  - Added code to skip PID if SKU is SharePoint Foundation.
+#  - Modified conditional for detecting $spInstalled to catch SharePoint Foundation.
+
 # Check that the version of the script matches the Version (essentially the schema) of the input XML so we don't have any unexpected behavior
 Function CheckXMLVersion ([xml]$xmlinput)
 {
@@ -283,13 +287,18 @@ Function CheckConfigFiles([xml]$xmlinput)
     {
         Get-MajorVersionNumber $xmlinput
         # Write out a new config file based on defaults and the values provided in $inputFile
-        $pidKey = $xmlinput.Configuration.Install.PIDKey
-        # Do a rudimentary check on the presence and format of the product key
-        if ($pidKey -notlike "?????-?????-?????-?????-?????")
-        {
-            throw " - The Product ID (PIDKey) is missing or badly formatted.`n - Check the value of <PIDKey> in `"$(Split-Path -Path $inputFile -Leaf)`" and try again."
+
+        $SKU = $xmlinput.Configuration.Install.SKU
+        if($SKU -ne "Foundation") {
+
+            $pidKey = $xmlinput.Configuration.Install.PIDKey
+            # Do a rudimentary check on the presence and format of the product key
+            if ($pidKey -notlike "?????-?????-?????-?????-?????")
+            {
+                throw " - The Product ID (PIDKey) is missing or badly formatted.`n - Check the value of <PIDKey> in `"$(Split-Path -Path $inputFile -Leaf)`" and try again."
+            }
+            $officeServerPremium = $xmlinput.Configuration.Install.SKU -replace "Enterprise","1" -replace "Standard","0"
         }
-        $officeServerPremium = $xmlinput.Configuration.Install.SKU -replace "Enterprise","1" -replace "Standard","0"
         $installDir = $xmlinput.Configuration.Install.InstallDir
         # Set $installDir to the default value if it's not specified in $xmlinput
         if ([string]::IsNullOrEmpty($installDir)) {$installDir = "%PROGRAMFILES%\Microsoft Office Servers\"}
@@ -310,8 +319,16 @@ Function CheckConfigFiles([xml]$xmlinput)
   <Logging Type="verbose" Path="%temp%" Template="SharePoint Server Setup(*).log"/>
   <Display Level="basic" CompletionNotice="No" AcceptEula="Yes"/>
   <INSTALLLOCATION Value="$installDir"/>
-  <DATADIR Value="$dataDir"/>
-  <PIDKEY Value="$pidKey"/>
+"@
+
+        if ($SKU -ne "Foundation") {
+        $xmlConfig += @"
+      <DATADIR Value="$dataDir"/>
+      <PIDKEY Value="$pidKey"/>
+"@
+        }
+
+        $xmlConfig += @"
   <Setting Id="SERVERROLE" Value="APPLICATION"/>
   <Setting Id="USINGUIINSTALLMODE" Value="1"/>
   <Setting Id="SETUPTYPE" Value="CLEAN_INSTALL"/>
@@ -7356,7 +7373,10 @@ Function CheckIfUpgradeNeeded
 Function Get-SharePointInstall
 {
     # New(er), faster way courtesy of SPRambler (https://www.codeplex.com/site/users/view/SpRambler)
-    if ((Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*) | Where-Object {$_.DisplayName -like "Microsoft SharePoint Server*"})
+    if ((Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*) | Where-Object {
+        $_.DisplayName -like "Microsoft SharePoint Server*" `
+        -or $_.DisplayName -like "Microsoft SharePoint Foundation*"
+        })
     {
         return $true
     }
