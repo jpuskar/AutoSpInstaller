@@ -1,2 +1,7 @@
-# AutoSpInstaller
-AutoSpInstaller modified to work with SharePoint 2013 Foundation.
+Build with:
+
+```powershell
+# zip it up
+Compress-Archive -Path .\src\* -DestinationPath .\tools\autospinstaller.zip
+choco pack
+```

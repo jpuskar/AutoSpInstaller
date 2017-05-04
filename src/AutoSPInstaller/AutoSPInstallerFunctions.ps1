@@ -2,7 +2,7 @@
 # EXTERNAL FUNCTIONS
 # ===================================================================================
 
-# Modified by John Puskar, johnpuskar@gmail.com, on 11/16/16.
+# Modified by John Puskar; jpuskar@us.ibm.com, on 11/16/16.
 #  - Added code to skip PID if SKU is SharePoint Foundation.
 #  - Modified conditional for detecting $spInstalled to catch SharePoint Foundation.
 
@@ -26,7 +26,7 @@ Function CheckXMLVersion ([xml]$xmlinput)
             Write-Host -ForegroundColor Yellow " - You should compare against the latest AutoSPInstallerInput.XML for missing/updated elements."
             Write-Host -ForegroundColor Yellow " - Or, try to validate/update your XML input at https://autospinstaller.com"
         }
-        Pause "proceed with running AutoSPInstaller if you are sure this is OK, or Ctrl-C to exit" "y"
+        Throw # Pause "proceed with running AutoSPInstaller if you are sure this is OK, or Ctrl-C to exit" "y"
     }
 }
 
@@ -133,7 +133,9 @@ Function ValidateCredentials([xml]$xmlinput)
             Write-Host -ForegroundColor Black -BackgroundColor Green "Verified."
         }
     }
-    If ($acctInvalid) {Throw " - At least one set of credentials is invalid.`n - Check usernames and passwords in each place they are used."}
+    If ($acctInvalid) {
+		Write-Host " - At least one set of credentials is invalid.`n - Check usernames and passwords in each place they are used."
+		}
     WriteLine
 }
 #EndRegion
@@ -657,26 +659,29 @@ Function InstallPrerequisites([xml]$xmlinput)
                 # Try to pre-install .Net Framework 3.5.1 on Windows Server 2012, 2012 R2 or 2016
                 if ((Get-WmiObject Win32_OperatingSystem).Version -like "6.2*" -or (Get-WmiObject Win32_OperatingSystem).Version -like "6.3*" -or (Get-WmiObject Win32_OperatingSystem).Version -like "6.4*" -or (Get-WmiObject Win32_OperatingSystem).Version -like "10.0*")
                 {
-                    if (Test-Path -Path "$env:SPbits\PrerequisiteInstallerFiles\sxs")
+					if (!(Get-WindowsFeature -Name NET-Framework-Core).Installed)
                     {
-                        Write-Host -ForegroundColor White "  - .Net Framework 3.5.1 from `"$env:SPbits\PrerequisiteInstallerFiles\sxs`"..." -NoNewline
-                        # Get the current progress preference
-                        $pref = $ProgressPreference
-                        # Hide the progress bar since it tends to not disappear
-                        $ProgressPreference = "SilentlyContinue"
-                        Import-Module ServerManager
-                        if (!(Get-WindowsFeature -Name NET-Framework-Core).Installed)
-                        {
-                            Start-Process -FilePath DISM.exe -ArgumentList "/Online /Enable-Feature /FeatureName:NetFx3 /All /LimitAccess /Source:`"$env:SPbits\PrerequisiteInstallerFiles\sxs`"" -NoNewWindow -Wait
-                            ##Install-WindowsFeature NET-Framework-Core –Source "$env:SPbits\PrerequisiteInstallerFiles\sxs" | Out-Null
-                            Write-Host -ForegroundColor Green "Done."
-                        }
-                        else {Write-Host -ForegroundColor White "Already installed."}
-                        # Restore progress preference
-                        $ProgressPreference = $pref
-                    }
-                    else {Write-Host -ForegroundColor White " - Could not locate source for .Net Framework 3.5.1`n - The PrerequisiteInstaller will attempt to download it."}
-                }
+						if (Test-Path -Path "$env:SPbits\PrerequisiteInstallerFiles\sxs")
+						{
+							Write-Host -ForegroundColor White "  - .Net Framework 3.5.1 from `"$env:SPbits\PrerequisiteInstallerFiles\sxs`"..." -NoNewline
+							# Get the current progress preference
+							$pref = $ProgressPreference
+							# Hide the progress bar since it tends to not disappear
+							$ProgressPreference = "SilentlyContinue"
+							Import-Module ServerManager
+							if (!(Get-WindowsFeature -Name NET-Framework-Core).Installed)
+							{
+								Start-Process -FilePath DISM.exe -ArgumentList "/Online /Enable-Feature /FeatureName:NetFx3 /All /LimitAccess /Source:`"$env:SPbits\PrerequisiteInstallerFiles\sxs`"" -NoNewWindow -Wait
+								##Install-WindowsFeature NET-Framework-Core –Source "$env:SPbits\PrerequisiteInstallerFiles\sxs" | Out-Null
+								Write-Host -ForegroundColor Green "Done."
+							}
+							else {Write-Host -ForegroundColor White "Already installed."}
+							# Restore progress preference
+							$ProgressPreference = $pref
+						}
+						else {Write-Host -ForegroundColor White " - Could not locate source for .Net Framework 3.5.1`n - The PrerequisiteInstaller will attempt to download it."}
+					}
+				}
                 if ($env:spVer -eq "14") # SP2010
                 {
                     Write-Host -ForegroundColor White "  - SQL Native Client..."
@@ -891,15 +896,17 @@ Function InstallPrerequisites([xml]$xmlinput)
         Else
         {
             # Get error(s) from log
+			$preReqLastError = $null
             $preReqLastError = $preReqLog | Select-String -SimpleMatch -Pattern "Error" -Encoding Unicode | ? {$_.Line  -notlike "*Startup task*"}
-            If ($preReqLastError)
-            {
+            If ($null -eq $preReqLastError) {
+			} Else {
+				write-host -f yellow $preReqLastError
                 ForEach ($preReqError in ($preReqLastError | ForEach {$_.Line})) {Write-Warning $preReqError}
                 $preReqLastReturncode = $preReqLog | Select-String -SimpleMatch -Pattern "Last return code" -Encoding Unicode | Select-Object -Last 1
                 If ($preReqLastReturnCode) {Write-Verbose $preReqLastReturncode.Line}
                 If (!($preReqLastReturncode -like "*(0)"))
                 {
-                    Write-Warning $preReqLastReturncode.Line
+                    Write-Warning $preReqLastReturncode #.Line
                     If (($preReqLastReturncode -like "*-2145124329*") -or ($preReqLastReturncode -like "*2359302*") -or ($preReqLastReturncode -eq "5"))
                     {
                         Write-Host -ForegroundColor White " - A known issue occurred installing one of the prerequisites - retrying..."
@@ -1242,7 +1249,7 @@ Function InstallProjectServer([xml]$xmlinput)
             Else
             {
                 Write-Warning "Project Server installation requested, but install path $bits\$spYear\ProjectServer not found!!"
-                pause "continue"
+                Throw # Pause "continue"
             }
         }
         WriteLine
@@ -1569,7 +1576,7 @@ Function InstallUpdates
                     Write-Warning "Error 17031: Detection: Invalid baseline"
                     Write-Warning "A baseline patch (e.g. March 2013 PU for SP2013, SP1 for SP2010) is missing!"
                     Write-Host -ForegroundColor Yellow "   - Either slipstream the missing patch first, or include the patch package in the ..\$spYear\Updates folder."
-                    Pause "continue"
+                    Throw # Pause "continue"
                 }
                 else {Write-Host "   - $($oPatchInstallResultCodes.$oPatchInstallResultCode)"}
             }
@@ -1619,7 +1626,7 @@ Function InstallSpecifiedUpdate ($updateFile, $updateName)
             Write-Warning "Error 17031: Detection: Invalid baseline"
             Write-Warning "A baseline patch (e.g. March 2013 PU for SP2013, SP1 for SP2010) is missing!"
             Write-Host -ForegroundColor Yellow "   - Either slipstream the missing patch first, or include the patch package in the ..\$spYear\Updates folder."
-            Pause "continue"
+            Throw # Pause "continue"
         }
         else {Write-Host "  - $($oPatchInstallResultCodes.$oPatchInstallResultCode)"}
     }
@@ -2397,7 +2404,7 @@ Function CreateGenericServiceApplication()
     Catch
     {
         Write-Output $_
-        Pause "exit"
+        Throw # Pause "exit"
     }
 }
 #EndRegion
@@ -3018,7 +3025,7 @@ Function ConfigureObjectCache([System.Xml.XmlElement]$webApp)
     {
         $_
         Write-Warning "An error occurred applying object cache to `"$url`""
-        Pause "exit"
+        Throw # Pause "exit"
     }
 }
 
@@ -3269,7 +3276,7 @@ Function CreateUserProfileServiceApplication([xml]$xmlinput)
                         Write-Host -ForegroundColor Cyan "."
                         Write-Warning "Timed out waiting for service creation (maybe a UAC prompt?)"
                         Write-Host "`a`a`a" # System beeps
-                        Pause "try again"
+                        Throw # Pause "try again"
                         CreateUPSAsAdmin $xmlinput
                         Write-Host -ForegroundColor Cyan " - Waiting for $userProfileServiceName..." -NoNewline
                         $profileServiceApp = Get-SPServiceApplication |?{$_.DisplayName -eq $userProfileServiceName}
@@ -3613,7 +3620,7 @@ Function CreateUPSAsAdmin([xml]$xmlinput)
     Catch
     {
         Write-Output $_
-        Pause "exit"
+        Throw # Pause "exit"
     }
     finally
     {
@@ -6387,7 +6394,7 @@ Function Configure-PDFSearchAndIcon
                     $destinationFile = $zipLocation+"\PDFiFilter64installer.zip"
                     Import-Module BitsTransfer | Out-Null
                     Start-BitsTransfer -Source $pdfIfilterUrl -Destination $destinationFile -DisplayName "Downloading Adobe PDF iFilter..." -Priority Foreground -Description "From $pdfIfilterUrl..." -ErrorVariable err
-                    If ($err) {Write-Warning "Could not download Adobe PDF iFilter!"; Pause "exit"; break}
+                    If ($err) {Write-Warning "Could not download Adobe PDF iFilter!"; Throw } # Pause "exit"; break}
                     $sourceFile = $destinationFile
                 }
                 Else {Write-Warning "The remote use of BITS is not supported. Please pre-download the PDF install files and try again."}
@@ -6481,7 +6488,7 @@ Function Configure-PDFSearchAndIcon
                     {
                         Import-Module BitsTransfer | Out-Null
                         Start-BitsTransfer -Source $pdfIconUrl -Destination "$sharePointRoot\Template\Images\$pdfIcon" -DisplayName "Downloading PDF Icon..." -Priority Foreground -Description "From $pdfIconUrl..." -ErrorVariable err
-                        If ($err) {Write-Warning "Could not download PDF Icon!"; Pause "exit"; break}
+                        If ($err) {Write-Warning "Could not download PDF Icon!"; Throw } # Pause "exit"; break}
                     }
                     Else {Write-Warning "The remote use of BITS is not supported. Please pre-download the PDF icon and try again."}
                 }
@@ -6496,7 +6503,7 @@ Function Configure-PDFSearchAndIcon
                     $pdf.SetAttribute("Key","pdf")
                     $pdf.SetAttribute("Value",$pdfIcon)
                 }
-                Catch {$_; Pause "exit"; Break}
+                Catch {$_; Throw }# Pause "exit"; Break}
             }
         }
         # Perform the rest of the DOCICON.XML modifications to allow PDF edit etc., and write out the new DOCICON.XML file
@@ -6516,7 +6523,7 @@ Function Configure-PDFSearchAndIcon
             Write-Host -ForegroundColor White " - Restarting IIS..."
             iisreset
         }
-        Catch {$_; Pause "exit"; Break}
+        Catch {$_; Throw } # Pause "exit"; Break}
     }
     If ($xmlinput.Configuration.AdobePDF.MIMEType.Configure -eq $true)
     {
@@ -6632,7 +6639,7 @@ Function Enable-CredSSP ($remoteFarmServers)
 {
     ForEach ($server in $remoteFarmServers) {Write-Host -ForegroundColor White " - Enabling WSManCredSSP for `"$server`""}
     Enable-WSManCredSSP -Role Client -Force -DelegateComputer $remoteFarmServers | Out-Null
-    If (!$?) {Pause "exit"; throw $_}
+    If (!$?) {Throw $_} # Pause "exit"; throw $_}
 }
 
 Function Test-ServerConnection ($server)
@@ -6664,7 +6671,7 @@ Function Enable-RemoteSession ($server, $password)
         $psExecUrl = "http://live.sysinternals.com/PsExec.exe"
         Import-Module BitsTransfer | Out-Null
         Start-BitsTransfer -Source $psExecUrl -Destination $psExec -DisplayName "Downloading Sysinternals PsExec..." -Priority Foreground -Description "From $psExecUrl..." -ErrorVariable err
-        If ($err) {Write-Warning "Could not download PsExec!"; Pause "exit"; break}
+        If ($err) {Write-Warning "Could not download PsExec!"; Throw} # Pause "exit"; break}
         $sourceFile = $destinationFile
     }
     Write-Host -ForegroundColor White " - Updating PowerShell execution policy on `"$server`" via PsExec..."
@@ -6747,7 +6754,7 @@ Function Install-WindowsIdentityFoundation ($server, $password)
                 $wifURL = "http://download.microsoft.com/download/D/7/2/D72FD747-69B6-40B7-875B-C2B40A6B2BDD/$wifHotfix"
                 Import-Module BitsTransfer | Out-Null
                 Start-BitsTransfer -Source $wifURL -Destination "$env:SPbits\PrerequisiteInstallerFiles\$wifHotfix" -DisplayName "Downloading `'$wifHotfix`' to $env:SPbits\PrerequisiteInstallerFiles" -Priority Foreground -Description "From $wifURL..." -ErrorVariable err
-                if ($err) {Throw " - Could not download from $wifURL!"; Pause "exit"; break}
+                if ($err) {Throw " - Could not download from $wifURL!"; Throw }# Pause "exit"; break}
             }
             $psExec = $env:dp0+"\PsExec.exe"
             If (!(Get-Item ($psExec) -ErrorAction SilentlyContinue))
@@ -6756,7 +6763,7 @@ Function Install-WindowsIdentityFoundation ($server, $password)
                 $psExecUrl = "http://live.sysinternals.com/PsExec.exe"
                 Import-Module BitsTransfer | Out-Null
                 Start-BitsTransfer -Source $psExecUrl -Destination $psExec -DisplayName "Downloading Sysinternals PsExec..." -Priority Foreground -Description "From $psExecUrl..." -ErrorVariable err
-                If ($err) {Write-Warning "Could not download PsExec!"; Pause "exit"; break}
+                If ($err) {Write-Warning "Could not download PsExec!"; Throw } # Pause "exit"; break}
                 $sourceFile = $destinationFile
             }
             Write-Host -ForegroundColor White " - Pre-installing Windows Identity Foundation on `"$server`" via PsExec..."
@@ -7078,7 +7085,7 @@ Function CheckSQLAccess
                 {
                     Write-Warning "Connection Error. Check server name, port, firewall."
                     Write-Host -ForegroundColor White " - This may be expected if e.g. SQL server isn't installed yet, and you are just installing SharePoint binaries for now."
-                    Pause "continue without checking SQL Server connection, or Ctrl-C to exit" "y"
+                    Throw # Pause "continue without checking SQL Server connection, or Ctrl-C to exit" "y"
                 }
                 ElseIf ($errText.Contains("Login failed"))
                 {
@@ -7552,14 +7559,14 @@ Function Pause($action, $key)
         }
         else
         {
-            Write-Host "Skipping pause due to -unattended switch: $actionString"
+            Write-Host "Skipping Pause due to -unattended switch: $actionString"
         }
     }
     else
     {
         $actionString = "Enter `"$key`" to $action"
         $continue = Read-Host -Prompt $actionString
-        if ($continue -ne $key) {pause $action $key}
+        if ($continue -ne $key) {Pause $action $key}
 
     }
 }

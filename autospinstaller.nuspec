@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+  <metadata>
+    <id>autospinstaller</id>
+    <version>4.0.0</version>
+    <title>autospinstaller (Install)</title>
+    <authors>brianlala</authors>
+    <owners>jpuskar</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>autospinstaller</description>
+    <summary>autospinstaller</summary>
+    <tags>autospinstaller admin</tags>
+  </metadata>
+</package>

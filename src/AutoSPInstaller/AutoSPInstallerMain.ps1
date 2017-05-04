@@ -63,7 +63,7 @@ if ([string]::IsNullOrEmpty($env:SPbits))
 {
     # Changed this to a warning in case we just want to create/configure a farm and are sure that SharePoint is pre-installed
     Write-Warning "Cannot locate SharePoint binaries; please check that the files are in the \$product subfolder as per new folder structure."
-    Pause "proceed if you know that SharePoint is already installed, or Ctrl-C to exit" "y"
+    Throw # "proceed if you know that SharePoint is already installed, or Ctrl-C to exit" "y"
     # If no setup binaries are present, this might be OK if SharePoint is already installed and we've specified the version in the XML
     $spInstalled = $true
     # Check to see that we've at least specified the desired version in the XML
@@ -170,7 +170,7 @@ Function PrepForInstall
     CheckInput
     Write-Host -ForegroundColor White " - Install based on: `n  - $inputFile `n  - Environment: $($xmlinput.Configuration.getAttribute(`"Environment`")) `n  - Version: $($xmlinput.Configuration.getAttribute(`"Version`"))"
     $spInstalled = (Get-SharePointInstall)
-    ValidateCredentials $xmlinput
+    #ValidateCredentials $xmlinput
     ValidatePassphrase $xmlinput
     CheckConfigFiles $xmlinput
     CheckSQLAccess
@@ -367,7 +367,7 @@ If (($enableRemoteInstall -and !([string]::IsNullOrEmpty($remoteFarmServers))) -
             If (($user -ne $null) -and ($credential.Password -ne $null)) {$password = ConvertTo-PlainText $credential.Password}
             Else
             {
-                If ($enableRemoteInstall -and !([string]::IsNullOrEmpty($remoteFarmServers))) {Write-Error " - Credentials are required for remote authentication."; Pause "exit"; Throw}
+                If ($enableRemoteInstall -and !([string]::IsNullOrEmpty($remoteFarmServers))) {Write-Error " - Credentials are required for remote authentication."; Throw}
                 Else {Write-Host -ForegroundColor Yellow " - No password supplied; skipping AutoAdminLogon."; break}
             }
             Write-Host -ForegroundColor White " - Checking credentials: `"$($credential.Username)`"..." -NoNewline
@@ -432,7 +432,7 @@ If (MatchComputerName $farmServers $env:COMPUTERNAME)
 
         If (($xmlinput.Configuration.Install.PauseAfterInstall -eq $true) -or ($xmlinput.Configuration.Install.RemoteInstall.ParallelInstall -eq $true))
         {
-            Pause "proceed with farm configuration" "y"
+            # Pause "proceed with farm configuration" "y"
         }
         Setup-Farm
         Setup-Services
@@ -535,7 +535,7 @@ If (MatchComputerName $farmServers $env:COMPUTERNAME)
         Write-Host -ForegroundColor White "| Aborted:    $env:EndDate |"
         Write-Host -ForegroundColor White "-----------------------------------"
         $aborted = $true
-        If (!$scriptCommandLine -and (!(Confirm-LocalSession))) {Pause "exit"}
+        # If (!$scriptCommandLine -and (!(Confirm-LocalSession))) {Pause "exit"}
     }
     Finally
     {
@@ -587,7 +587,7 @@ If (!$aborted)
 	    Write-Host -ForegroundColor White "| Completed:  $env:EndDate |"
 	    Write-Host -ForegroundColor White "-----------------------------------"
 	    If ($isTracing) {Stop-Transcript; $script:isTracing = $false}
-	    Pause "exit"
+	    #Pause "exit"
 	    If ((-not $unattended) -and (-not (Gwmi Win32_OperatingSystem).Version -eq "6.1.7601")) {Invoke-Item $logFile} # We don't want to automatically open the log Win 2008 with SP2013, due to a nasty bug causing BSODs! See https://autospinstaller.codeplex.com/workitem/19491 for more info.
 	}
 	# Remove any lingering LogTime values in the registry
